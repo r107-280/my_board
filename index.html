@@ -1,0 +1,1226 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src 'none';
+           script-src 'unsafe-inline';
+           style-src 'unsafe-inline';
+           connect-src https://*.supabase.co;
+           img-src 'none';
+           font-src 'none';
+           frame-src 'none';
+           object-src 'none';
+           base-uri 'none';
+           form-action 'none';">
+<title>Kanban Board · Secure</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  @keyframes fadein { from { opacity:0; transform:translateX(-50%) translateY(8px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+    background: #f0f2f5;
+    min-height: 100vh;
+    color: #1a1a2e;
+  }
+
+  /* ── LOCK SCREEN ── */
+  #lockScreen {
+    position: fixed; inset: 0;
+    background: linear-gradient(135deg, #1F4E79 0%, #0d2f4f 100%);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999;
+  }
+  #lockScreen.hidden { display: none; }
+  .lock-box {
+    background: white; border-radius: 18px;
+    padding: 40px 44px; width: 380px; max-width: 92vw;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.35);
+    text-align: center;
+  }
+  .lock-icon { font-size: 2.8rem; margin-bottom: 12px; }
+  .lock-box h2 { font-size: 1.3rem; color: #1F4E79; margin-bottom: 6px; }
+  .lock-box p { font-size: 0.84rem; color: #888; margin-bottom: 24px; line-height: 1.5; }
+  .lock-input {
+    width: 100%; padding: 12px 16px; border: 2px solid #ddd;
+    border-radius: 10px; font-size: 1rem; text-align: center;
+    letter-spacing: 2px; transition: border-color 0.15s;
+    outline: none;
+  }
+  .lock-input:focus { border-color: #1F4E79; }
+  .lock-input.error { border-color: #e74c3c; animation: shake 0.3s; }
+  @keyframes shake {
+    0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)}
+  }
+  .lock-btn {
+    width: 100%; margin-top: 14px; padding: 13px;
+    background: #1F4E79; color: white; border: none;
+    border-radius: 10px; font-size: 1rem; font-weight: 600;
+    cursor: pointer; transition: background 0.15s;
+  }
+  .lock-btn:hover { background: #163d61; }
+  .lock-hint {
+    margin-top: 14px; font-size: 0.78rem; color: #bbb;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .lock-error { color: #e74c3c; font-size: 0.82rem; margin-top: 10px; min-height: 18px; }
+  .lock-lockout {
+    background: #fde8e8; border: 1px solid #f5c6c6; border-radius: 8px;
+    padding: 10px 14px; margin-top: 12px; font-size: 0.82rem; color: #c0392b; display: none;
+  }
+  .https-warning {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 99999;
+    background: #e74c3c; color: white; text-align: center;
+    padding: 10px; font-size: 0.88rem; font-weight: 600;
+  }
+
+  /* FIRST-TIME SETUP */
+  #setupScreen {
+    position: fixed; inset: 0;
+    background: linear-gradient(135deg, #1F4E79 0%, #0d2f4f 100%);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 9999;
+  }
+  #setupScreen.hidden { display: none; }
+  .setup-box {
+    background: white; border-radius: 18px;
+    padding: 36px 40px; width: 420px; max-width: 92vw;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.35);
+  }
+  .setup-box h2 { font-size: 1.2rem; color: #1F4E79; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .setup-box p { font-size: 0.84rem; color: #666; margin-bottom: 20px; line-height: 1.6; }
+  .setup-field { margin-bottom: 14px; }
+  .setup-field label { display: block; font-size: 0.8rem; font-weight: 600; color: #555; margin-bottom: 5px; }
+  .setup-field input {
+    width: 100%; padding: 10px 12px; border: 1.5px solid #ddd;
+    border-radius: 8px; font-size: 0.88rem; outline: none; transition: border-color 0.15s;
+  }
+  .setup-field input:focus { border-color: #1F4E79; }
+  .setup-field .hint { font-size: 0.75rem; color: #999; margin-top: 4px; }
+  .setup-btn {
+    width: 100%; padding: 12px; background: #70AD47; color: white;
+    border: none; border-radius: 10px; font-size: 0.95rem; font-weight: 600;
+    cursor: pointer; margin-top: 8px; transition: background 0.15s;
+  }
+  .setup-btn:hover { background: #5d9a38; }
+  .setup-warning {
+    background: #fef3e2; border: 1px solid #f9c74f; border-radius: 8px;
+    padding: 10px 14px; font-size: 0.8rem; color: #7c4a00; margin-bottom: 16px;
+    line-height: 1.5;
+  }
+  .setup-warning::before { content: "⚠ "; font-weight: bold; }
+
+  /* SYNC STATUS */
+  .sync-indicator {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 0.78rem; color: rgba(255,255,255,0.7);
+  }
+  .sync-dot { width: 7px; height: 7px; border-radius: 50%; background: #70AD47; }
+  .sync-dot.syncing { background: #f39c12; animation: pulse 1s infinite; }
+  .sync-dot.error { background: #e74c3c; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .spinner {
+    width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3);
+    border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+
+  /* HEADER */
+  header {
+    background: #1F4E79; color: white;
+    padding: 14px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    position: sticky; top: 0; z-index: 100;
+  }
+  header h1 { font-size: 1.2rem; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  .header-left { display: flex; align-items: center; gap: 16px; }
+  .header-actions { display: flex; gap: 10px; align-items: center; }
+
+  .btn {
+    padding: 7px 14px; border: none; border-radius: 7px;
+    cursor: pointer; font-size: 0.85rem; font-weight: 500;
+    transition: all 0.15s; display: flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,0.15); }
+  .btn-primary { background: #70AD47; color: white; }
+  .btn-secondary { background: rgba(255,255,255,0.15); color: white; border: 1px solid rgba(255,255,255,0.3); }
+  .btn-danger { background: #e74c3c; color: white; }
+  .btn-ghost { background: transparent; color: #555; border: 1px solid #ddd; }
+  .btn-ghost:hover { background: #f5f5f5; }
+  .btn-claude { background: #D97706; color: white; }
+  .btn-claude:hover { background: #B45309; }
+  .btn-lock { background: rgba(255,255,255,0.1); color: rgba(255,255,255,0.8); border: 1px solid rgba(255,255,255,0.2); }
+
+  /* PROJECT TABS */
+  .project-bar {
+    background: white; border-bottom: 1px solid #e0e0e0;
+    padding: 0 24px; display: flex; align-items: center; gap: 4px; overflow-x: auto;
+  }
+  .project-tab {
+    padding: 10px 18px; border: none; background: none; cursor: pointer;
+    font-size: 0.88rem; color: #666; border-bottom: 3px solid transparent;
+    white-space: nowrap; transition: all 0.15s; font-weight: 500;
+  }
+  .project-tab:hover { color: #1F4E79; }
+  .project-tab.active { color: #1F4E79; border-bottom-color: #1F4E79; font-weight: 600; }
+  .project-tab.add-tab { color: #999; font-size: 1.1rem; padding: 10px 12px; }
+  .project-tab.add-tab:hover { color: #70AD47; }
+
+  /* BOARD */
+  .board-wrapper { padding: 20px 24px; overflow-x: auto; }
+  .board { display: flex; gap: 16px; align-items: flex-start; min-width: max-content; }
+
+  /* COLUMNS */
+  .column {
+    width: 290px; background: white; border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    display: flex; flex-direction: column; max-height: calc(100vh - 180px);
+  }
+  .column-header {
+    padding: 14px 16px 10px; display: flex; align-items: center;
+    justify-content: space-between; border-bottom: 1px solid #f0f0f0;
+    border-radius: 12px 12px 0 0;
+  }
+  .column-title-row { display: flex; align-items: center; gap: 8px; }
+  .column-dot { width: 10px; height: 10px; border-radius: 50%; }
+  .column-title { font-size: 0.9rem; font-weight: 600; color: #333; }
+  .column-count { background: #f0f2f5; color: #666; border-radius: 20px; padding: 1px 8px; font-size: 0.75rem; font-weight: 600; }
+  .column-actions { display: flex; gap: 4px; }
+  .col-btn { background: none; border: none; cursor: pointer; color: #bbb; font-size: 1rem; padding: 2px 5px; border-radius: 4px; transition: color 0.15s; }
+  .col-btn:hover { color: #666; background: #f5f5f5; }
+  .cards-container { padding: 10px; flex: 1; overflow-y: auto; min-height: 60px; }
+  .cards-container.drag-over { background: #EBF3FB; border-radius: 8px; }
+
+  /* CARDS */
+  .card {
+    background: white; border: 1px solid #e8e8e8; border-radius: 9px;
+    padding: 12px; margin-bottom: 8px; cursor: grab;
+    transition: all 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.06); position: relative;
+  }
+  .card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.1); transform: translateY(-1px); }
+  .card.dragging { opacity: 0.4; }
+  .card-priority-bar { position: absolute; left: 0; top: 0; bottom: 0; width: 4px; border-radius: 9px 0 0 9px; }
+  .card-inner { padding-left: 6px; }
+  .card-title { font-size: 0.88rem; font-weight: 500; color: #222; margin-bottom: 6px; line-height: 1.4; }
+  .card-desc { font-size: 0.78rem; color: #888; margin-bottom: 8px; line-height: 1.4; }
+  .card-meta { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px; }
+  .card-badge { font-size: 0.7rem; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+  .priority-hoch { background: #fde8e8; color: #c0392b; }
+  .priority-mittel { background: #fef3e2; color: #d35400; }
+  .priority-tief { background: #e8f5e9; color: #27ae60; }
+  .card-date { font-size: 0.72rem; color: #999; display: flex; align-items: center; gap: 3px; }
+  .card-date.overdue { color: #e74c3c; font-weight: 600; }
+  .card-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
+  .card:hover .card-actions { opacity: 1; }
+  .card-action-btn { background: none; border: none; cursor: pointer; color: #bbb; font-size: 0.8rem; padding: 2px 5px; border-radius: 4px; }
+  .card-action-btn:hover { color: #555; background: #f0f0f0; }
+
+  /* ADD CARD BUTTON */
+  .add-card-btn {
+    width: 100%; padding: 8px; background: none; border: 1px dashed #ddd;
+    border-radius: 8px; cursor: pointer; color: #bbb; font-size: 0.82rem;
+    margin-top: 4px; transition: all 0.15s; display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .add-card-btn:hover { border-color: #70AD47; color: #70AD47; background: #f0faf0; }
+
+  /* ADD COLUMN */
+  .add-column-btn {
+    width: 60px; height: 60px; background: white; border: 2px dashed #ddd;
+    border-radius: 12px; cursor: pointer; color: #bbb; font-size: 1.6rem;
+    transition: all 0.15s; display: flex; align-items: center; justify-content: center; align-self: flex-start;
+  }
+  .add-column-btn:hover { border-color: #70AD47; color: #70AD47; }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.4); z-index: 200;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: white; border-radius: 14px; padding: 28px;
+    width: 460px; max-width: 95vw; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  }
+  .modal h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: 20px; color: #1F4E79; }
+  .form-group { margin-bottom: 14px; }
+  .form-group label { display: block; font-size: 0.82rem; font-weight: 600; color: #555; margin-bottom: 5px; }
+  .form-group input, .form-group textarea, .form-group select {
+    width: 100%; padding: 9px 12px; border: 1px solid #ddd; border-radius: 8px;
+    font-size: 0.88rem; font-family: inherit; color: #333; transition: border-color 0.15s;
+  }
+  .form-group input:focus, .form-group textarea:focus, .form-group select:focus { outline: none; border-color: #1F4E79; }
+  .form-group textarea { resize: vertical; min-height: 70px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+  /* EMPTY STATE */
+  .empty-state { text-align: center; padding: 30px 10px; color: #ccc; font-size: 0.82rem; }
+  .empty-state div { font-size: 2rem; margin-bottom: 8px; }
+
+  /* STATS BAR */
+  .stats-bar {
+    background: white; border-bottom: 1px solid #e8e8e8;
+    padding: 8px 24px; display: flex; gap: 24px; font-size: 0.8rem; color: #888;
+  }
+  .stat { display: flex; align-items: center; gap: 5px; }
+  .stat strong { color: #333; }
+
+  /* COLUMN COLORS */
+  .col-todo .column-dot { background: #95a5a6; }
+  .col-todo .column-header { border-top: 3px solid #95a5a6; border-radius: 12px 12px 0 0; }
+  .col-inprogress .column-dot { background: #3498db; }
+  .col-inprogress .column-header { border-top: 3px solid #3498db; }
+  .col-review .column-dot { background: #f39c12; }
+  .col-review .column-header { border-top: 3px solid #f39c12; }
+  .col-done .column-dot { background: #70AD47; }
+  .col-done .column-header { border-top: 3px solid #70AD47; }
+  .col-custom .column-dot { background: #9b59b6; }
+  .col-custom .column-header { border-top: 3px solid #9b59b6; }
+
+  /* SECURITY BADGE */
+  .sec-badge {
+    display: flex; align-items: center; gap: 5px;
+    background: rgba(112,173,71,0.15); border: 1px solid rgba(112,173,71,0.4);
+    border-radius: 20px; padding: 3px 10px; font-size: 0.75rem; color: #70AD47; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<!-- ── SETUP SCREEN (first run) ── -->
+<div id="setupScreen" class="hidden">
+  <div class="setup-box">
+    <h2>🔧 Ersteinrichtung</h2>
+    <p>Verbinde dein Kanban Board mit Supabase. Die Daten werden <strong>vor dem Upload verschlüsselt</strong> — Supabase sieht nur verschlüsselte Blobs.</p>
+
+    <div class="setup-warning">
+      Das Passwort wird <strong>nirgends gespeichert</strong>. Verwende ProtonPass oder einen Passwortmanager. Wenn du es vergisst, sind die Daten nicht mehr lesbar.
+    </div>
+
+    <div class="setup-field">
+      <label>Supabase Project URL</label>
+      <input type="url" id="setupUrl" placeholder="https://xxxxxxxxxxxx.supabase.co">
+      <div class="hint">Supabase Dashboard → Project Settings → API → Project URL</div>
+    </div>
+    <div class="setup-field">
+      <label>Supabase Anon Key</label>
+      <input type="password" id="setupKey" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...">
+      <div class="hint">Project Settings → API → Project API Keys → anon public</div>
+    </div>
+    <div class="setup-field">
+      <label>Passwort (AES-256 Verschlüsselung)</label>
+      <input type="password" id="setupPw" placeholder="Starkes Passwort wählen">
+    </div>
+    <div class="setup-field">
+      <label>Passwort wiederholen</label>
+      <input type="password" id="setupPw2" placeholder="Passwort bestätigen">
+      <div class="hint">Nur zum Bestätigen — wird danach nicht mehr gespeichert.</div>
+    </div>
+    <div id="setupError" style="color:#e74c3c;font-size:0.82rem;margin-top:8px;min-height:18px"></div>
+    <button class="setup-btn" onclick="setupSave()">✅ Einrichtung abschließen</button>
+  </div>
+</div>
+
+<!-- ── HTTPS WARNING ── -->
+<div id="httpsWarning" class="https-warning" style="display:none">
+  ⚠ Unsichere Verbindung (HTTP). Web Crypto API erfordert HTTPS — bitte die Seite über HTTPS öffnen.
+</div>
+
+<!-- ── LOCK SCREEN ── -->
+<div id="lockScreen">
+  <div class="lock-box">
+    <div class="lock-icon">🔐</div>
+    <h2>Kanban Board</h2>
+    <p>Gib dein Passwort ein um fortzufahren.<br>Das Passwort entschlüsselt deine Daten lokal.</p>
+    <input type="password" class="lock-input" id="lockPw" placeholder="Passwort" autocomplete="off"
+      onkeydown="if(event.key==='Enter')unlock()">
+    <div class="lock-error" id="lockError"></div>
+    <div class="lock-lockout" id="lockLockout"></div>
+    <button class="lock-btn" id="lockBtn" onclick="unlock()">Entsperren</button>
+    <div class="lock-hint">🛡 AES-256-GCM · PBKDF2 600k · Daten bleiben verschlüsselt</div>
+    <div style="margin-top:14px">
+      <a href="#" onclick="showSetup(); return false;" style="font-size:0.75rem;color:#bbb;text-decoration:none">
+        Ersteinrichtung / Neue Verbindung
+      </a>
+    </div>
+  </div>
+</div>
+
+<!-- ── MAIN APP ── -->
+<div id="appShell" style="display:none">
+
+<header>
+  <div class="header-left">
+    <h1><span>📋</span> Kanban Board</h1>
+    <div class="sec-badge">🔒 E2E</div>
+    <div class="sync-indicator" id="syncIndicator">
+      <div class="sync-dot" id="syncDot"></div>
+      <span id="syncText">Verbunden</span>
+    </div>
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-secondary" onclick="exportCSV()">⬇ CSV</button>
+    <button class="btn btn-claude" onclick="openImportModal()">⚡ Import</button>
+    <button class="btn btn-primary" onclick="openCardModal()">+ Karte</button>
+    <button class="btn btn-lock" onclick="lockBoard()" title="Board sperren">🔒</button>
+  </div>
+</header>
+
+<div class="project-bar" id="projectBar"></div>
+<div class="stats-bar" id="statsBar"></div>
+<div class="board-wrapper">
+  <div class="board" id="board"></div>
+</div>
+
+<!-- IMPORT MODAL -->
+<div class="modal-overlay" id="importModal">
+  <div class="modal" style="width:540px">
+    <h2>⚡ Import von Claude</h2>
+    <p style="font-size:0.83rem;color:#666;margin-bottom:14px;line-height:1.5">
+      JSON-Block aus dem Claude-Chat kopieren und hier einfügen.
+    </p>
+    <div style="background:#1e1e2e;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:0.75rem;color:#a0c4ff;font-family:monospace;line-height:1.6">
+      [<br>
+      &nbsp;&nbsp;{ "title": "Aufgabe 1", "desc": "Details", "priority": "hoch", "due": "2026-07-01", "col": "todo" },<br>
+      &nbsp;&nbsp;{ "title": "Aufgabe 2", "priority": "mittel", "col": "inprogress" }<br>
+      ]
+    </div>
+    <div class="form-group">
+      <label>In welches Projekt importieren?</label>
+      <select id="importProject"></select>
+    </div>
+    <div class="form-group">
+      <label>JSON von Claude einfügen *</label>
+      <textarea id="importJson" style="min-height:140px;font-family:monospace;font-size:0.82rem" placeholder='[{"title":"...", "priority":"mittel", "col":"todo"}, ...]'></textarea>
+    </div>
+    <div id="importPreview" style="display:none;background:#f0faf0;border:1px solid #c3e6c3;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:0.82rem;color:#2d6a2d"></div>
+    <div id="importError" style="display:none;background:#fde8e8;border:1px solid #f5c6c6;border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:0.82rem;color:#c0392b"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeImportModal()">Abbrechen</button>
+      <button class="btn btn-secondary" style="background:#555;color:white" onclick="previewImport()">Vorschau</button>
+      <button class="btn btn-claude" onclick="confirmImport()">Importieren</button>
+    </div>
+  </div>
+</div>
+
+<!-- CARD MODAL -->
+<div class="modal-overlay" id="cardModal">
+  <div class="modal">
+    <h2 id="modalTitle">Neue Karte</h2>
+    <div class="form-group">
+      <label>Titel *</label>
+      <input type="text" id="cardTitle" placeholder="Was muss erledigt werden?">
+    </div>
+    <div class="form-group">
+      <label>Beschreibung</label>
+      <textarea id="cardDesc" placeholder="Details, Kontext..."></textarea>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Priorität</label>
+        <select id="cardPriority">
+          <option value="tief">🟢 Tief</option>
+          <option value="mittel" selected>🟡 Mittel</option>
+          <option value="hoch">🔴 Hoch</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Fällig am</label>
+        <input type="date" id="cardDue">
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Spalte</label>
+      <select id="cardColumn"></select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeCardModal()">Abbrechen</button>
+      <button class="btn btn-primary" onclick="saveCard()">Speichern</button>
+    </div>
+  </div>
+</div>
+
+<!-- COLUMN MODAL -->
+<div class="modal-overlay" id="colModal">
+  <div class="modal">
+    <h2>Neue Spalte</h2>
+    <div class="form-group">
+      <label>Spaltenname *</label>
+      <input type="text" id="colName" placeholder="z.B. In Review, Blockiert...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeColModal()">Abbrechen</button>
+      <button class="btn btn-primary" onclick="saveColumn()">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+<!-- PROJECT MODAL -->
+<div class="modal-overlay" id="projModal">
+  <div class="modal">
+    <h2>Neues Projekt</h2>
+    <div class="form-group">
+      <label>Projektname *</label>
+      <input type="text" id="projName" placeholder="z.B. Website Relaunch, Q3 Planung...">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeProjModal()">Abbrechen</button>
+      <button class="btn btn-primary" onclick="saveProject()">Erstellen</button>
+    </div>
+  </div>
+</div>
+
+</div><!-- /appShell -->
+
+<script>
+// ════════════════════════════════════════════════════════════════════════
+// CONFIG (stored in localStorage — not sensitive)
+// ════════════════════════════════════════════════════════════════════════
+const CFG_KEY = 'kanban_secure_cfg';
+const DATA_ROW = 'kanban_main'; // row id in Supabase
+
+function loadCfg() {
+  try { return JSON.parse(localStorage.getItem(CFG_KEY)) || null; }
+  catch(e) { return null; }
+}
+function saveCfg(cfg) { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
+
+// ════════════════════════════════════════════════════════════════════════
+// CRYPTO — Web Crypto API (AES-256-GCM + PBKDF2)
+// ════════════════════════════════════════════════════════════════════════
+const ENC = new TextEncoder();
+const DEC = new TextDecoder();
+
+async function deriveKey(password, salt) {
+  // OWASP 2026: PBKDF2-SHA256 minimum 600,000 iterations
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw', ENC.encode(password), 'PBKDF2', false, ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    { name: 'PBKDF2', salt, iterations: 600000, hash: 'SHA-256' },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false, ['encrypt', 'decrypt']
+  );
+}
+
+async function encrypt(plaintext, key) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipherBuf = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv }, key, ENC.encode(plaintext)
+  );
+  // Pack: 12-byte IV + ciphertext → base64
+  const combined = new Uint8Array(12 + cipherBuf.byteLength);
+  combined.set(iv, 0);
+  combined.set(new Uint8Array(cipherBuf), 12);
+  return btoa(String.fromCharCode(...combined));
+}
+
+async function decrypt(b64, key) {
+  const combined = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  const iv = combined.slice(0, 12);
+  const cipherBuf = combined.slice(12);
+  const plainBuf = await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, cipherBuf);
+  return DEC.decode(plainBuf);
+}
+
+// Encode/decode salt to/from hex
+function saltToHex(salt) { return Array.from(salt).map(b => b.toString(16).padStart(2,'0')).join(''); }
+function hexToSalt(hex) { return new Uint8Array(hex.match(/.{2}/g).map(b => parseInt(b,16))); }
+
+// ════════════════════════════════════════════════════════════════════════
+// SUPABASE — minimal REST calls (no SDK, no external scripts)
+// ════════════════════════════════════════════════════════════════════════
+let SUPA_URL = '', SUPA_KEY = '';
+
+async function supaFetch(method, body) {
+  const url = `${SUPA_URL}/rest/v1/kanban_data?id=eq.${DATA_ROW}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': SUPA_KEY,
+      'Authorization': `Bearer ${SUPA_KEY}`,
+      'Prefer': method === 'POST' ? 'return=minimal,resolution=merge-duplicates' : 'return=minimal'
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  return res;
+}
+
+async function supaLoad() {
+  const res = await fetch(`${SUPA_URL}/rest/v1/kanban_data?id=eq.${DATA_ROW}&select=payload,salt`, {
+    headers: { 'apikey': SUPA_KEY, 'Authorization': `Bearer ${SUPA_KEY}` }
+  });
+  if (!res.ok) throw new Error('Supabase Fehler: ' + res.status);
+  const rows = await res.json();
+  return rows[0] || null;
+}
+
+async function supaSave(encPayload, saltHex) {
+  const res = await supaFetch('POST', { id: DATA_ROW, payload: encPayload, salt: saltHex });
+  if (!res.ok) throw new Error('Speichern fehlgeschlagen: ' + res.status);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// APP STATE
+// ════════════════════════════════════════════════════════════════════════
+let cryptoKey = null;  // CryptoKey in memory only — cleared on lock
+let saltHex = null;
+let data = null;
+let saveTimeout = null;
+let autoLockTimer = null;
+
+// ── BRUTE-FORCE LOCKOUT ──────────────────────────────────────────────────────
+const MAX_ATTEMPTS  = 5;
+const LOCKOUT_KEY   = 'kanban_lockout';
+
+function getLockoutState() {
+  try { return JSON.parse(localStorage.getItem(LOCKOUT_KEY)) || { attempts: 0, lockedUntil: 0 }; }
+  catch(e) { return { attempts: 0, lockedUntil: 0 }; }
+}
+function setLockoutState(s) { localStorage.setItem(LOCKOUT_KEY, JSON.stringify(s)); }
+function clearLockoutState() { localStorage.removeItem(LOCKOUT_KEY); }
+
+function isLockedOut() {
+  const s = getLockoutState();
+  if (s.lockedUntil > Date.now()) return s.lockedUntil;
+  return false;
+}
+
+function registerFailedAttempt() {
+  const s = getLockoutState();
+  s.attempts++;
+  if (s.attempts >= MAX_ATTEMPTS) {
+    // Exponential backoff: 1min, 2min, 4min … max 30min
+    const exp = Math.min(s.attempts - MAX_ATTEMPTS, 5);
+    s.lockedUntil = Date.now() + Math.pow(2, exp) * 60 * 1000;
+  }
+  setLockoutState(s);
+  return s;
+}
+
+function updateLockoutUI() {
+  const until = isLockedOut();
+  const btn    = document.getElementById('lockBtn');
+  const box    = document.getElementById('lockLockout');
+  const input  = document.getElementById('lockPw');
+  if (until) {
+    const secs = Math.ceil((until - Date.now()) / 1000);
+    const mins = Math.floor(secs / 60);
+    const rest = secs % 60;
+    box.textContent = `🔒 Zu viele Fehlversuche. Gesperrt für ${mins}:${String(rest).padStart(2,'0')} Min.`;
+    box.style.display = 'block';
+    btn.disabled = true;
+    input.disabled = true;
+    setTimeout(updateLockoutUI, 1000);
+  } else {
+    box.style.display = 'none';
+    btn.disabled = false;
+    input.disabled = false;
+  }
+}
+
+// ── AUTO-LOCK (30 min inactivity) ────────────────────────────────────────────
+const AUTO_LOCK_MS = 30 * 60 * 1000;
+
+function resetAutoLock() {
+  clearTimeout(autoLockTimer);
+  autoLockTimer = setTimeout(() => {
+    if (cryptoKey) {
+      showToast('🔒 Auto-Lock nach 30 Min. Inaktivität');
+      setTimeout(lockBoard, 1500);
+    }
+  }, AUTO_LOCK_MS);
+}
+
+function bindActivityEvents() {
+  ['mousemove','keydown','click','touchstart','scroll'].forEach(ev =>
+    document.addEventListener(ev, resetAutoLock, { passive: true })
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// SETUP
+// ════════════════════════════════════════════════════════════════════════
+function showSetup() {
+  document.getElementById('lockScreen').classList.add('hidden');
+  document.getElementById('setupScreen').classList.remove('hidden');
+}
+
+async function setupSave() {
+  const url = document.getElementById('setupUrl').value.trim().replace(/\/$/, '');
+  const key = document.getElementById('setupKey').value.trim();
+  const pw  = document.getElementById('setupPw').value;
+  const pw2 = document.getElementById('setupPw2').value;
+  const err = document.getElementById('setupError');
+
+  if (!url || !key) { err.textContent = 'Bitte URL und Key eingeben.'; return; }
+  if (!pw) { err.textContent = 'Bitte ein Passwort wählen.'; return; }
+  if (pw !== pw2) { err.textContent = 'Passwörter stimmen nicht überein.'; return; }
+  if (pw.length < 12) { err.textContent = 'Passwort muss mindestens 12 Zeichen haben.'; return; }
+
+  err.textContent = '';
+  SUPA_URL = url;
+  SUPA_KEY = key;
+
+  // Derive key + test connection
+  try {
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    saltHex = saltToHex(salt);
+    cryptoKey = await deriveKey(pw, salt);
+
+    // Test: encrypt + save empty board
+    data = defaultData();
+    const plaintext = JSON.stringify(data);
+    const enc = await encrypt(plaintext, cryptoKey);
+    await supaSave(enc, saltHex);
+
+    // Save config (no password, no key — only URL+anonKey+salt)
+    saveCfg({ url, anonKey: key, saltHex });
+
+    document.getElementById('setupScreen').classList.add('hidden');
+    document.getElementById('appShell').style.display = 'block';
+    render();
+    setSyncOk();
+  } catch(e) {
+    err.textContent = 'Verbindung fehlgeschlagen: ' + e.message;
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// LOCK / UNLOCK
+// ════════════════════════════════════════════════════════════════════════
+async function unlock() {
+  const pw    = document.getElementById('lockPw').value;
+  const errEl = document.getElementById('lockError');
+  const input = document.getElementById('lockPw');
+  errEl.textContent = '';
+
+  // Lockout check
+  if (isLockedOut()) { updateLockoutUI(); return; }
+  if (!pw) { errEl.textContent = 'Bitte Passwort eingeben.'; return; }
+
+  const cfg = loadCfg();
+  if (!cfg) { showSetup(); return; }
+
+  SUPA_URL = cfg.url;
+  SUPA_KEY = cfg.anonKey;
+  saltHex  = cfg.saltHex;
+
+  const btn = document.getElementById('lockBtn');
+  btn.disabled = true;
+  btn.textContent = '…';
+
+  try {
+    const salt = hexToSalt(saltHex);
+    cryptoKey = await deriveKey(pw, salt);
+
+    // Load + decrypt from Supabase
+    const row = await supaLoad();
+    if (!row) {
+      data = defaultData();
+    } else {
+      const plain = await decrypt(row.payload, cryptoKey);
+      if (row.salt && row.salt !== saltHex) {
+        saltHex = row.salt;
+        cfg.saltHex = saltHex;
+        saveCfg(cfg);
+        const newSalt = hexToSalt(saltHex);
+        cryptoKey = await deriveKey(pw, newSalt);
+      }
+      data = JSON.parse(plain);
+    }
+
+    // Success — clear lockout, start auto-lock
+    clearLockoutState();
+    document.getElementById('lockScreen').classList.add('hidden');
+    document.getElementById('appShell').style.display = 'block';
+    render();
+    setSyncOk();
+    bindActivityEvents();
+    resetAutoLock();
+  } catch(e) {
+    cryptoKey = null;
+    input.classList.add('error');
+    setTimeout(() => input.classList.remove('error'), 500);
+
+    if (e.name === 'OperationError') {
+      const s = registerFailedAttempt();
+      const remaining = MAX_ATTEMPTS - s.attempts;
+      if (remaining > 0) {
+        errEl.textContent = `Falsches Passwort. Noch ${remaining} Versuch(e).`;
+      } else {
+        updateLockoutUI();
+      }
+    } else {
+      errEl.textContent = 'Fehler: ' + e.message;
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Entsperren';
+    updateLockoutUI();
+  }
+}
+
+function lockBoard() {
+  cryptoKey = null;
+  data = null;
+  clearTimeout(autoLockTimer);
+  document.getElementById('appShell').style.display = 'none';
+  document.getElementById('lockScreen').classList.remove('hidden');
+  document.getElementById('lockPw').value = '';
+  document.getElementById('lockError').textContent = '';
+  document.getElementById('lockBtn').textContent = 'Entsperren';
+  document.getElementById('lockBtn').disabled = false;
+  updateLockoutUI();
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// SYNC
+// ════════════════════════════════════════════════════════════════════════
+function setSyncing() {
+  document.getElementById('syncDot').className = 'sync-dot syncing';
+  document.getElementById('syncText').textContent = 'Speichert…';
+}
+function setSyncOk() {
+  document.getElementById('syncDot').className = 'sync-dot';
+  document.getElementById('syncText').textContent = 'Gespeichert';
+}
+function setSyncError(msg) {
+  document.getElementById('syncDot').className = 'sync-dot error';
+  document.getElementById('syncText').textContent = msg || 'Fehler';
+}
+
+async function save() {
+  if (!cryptoKey || !data) return;
+  clearTimeout(saveTimeout);
+  saveTimeout = setTimeout(async () => {
+    setSyncing();
+    try {
+      const plain = JSON.stringify(data);
+      const enc = await encrypt(plain, cryptoKey);
+      await supaSave(enc, saltHex);
+      setSyncOk();
+    } catch(e) {
+      setSyncError('Sync-Fehler');
+      console.error('Save error:', e);
+    }
+  }, 600);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// DATA
+// ════════════════════════════════════════════════════════════════════════
+const DEFAULT_COLUMNS = [
+  { id: 'todo',       title: 'To Do',       colorClass: 'col-todo' },
+  { id: 'inprogress', title: 'In Progress', colorClass: 'col-inprogress' },
+  { id: 'review',     title: 'Review',      colorClass: 'col-review' },
+  { id: 'done',       title: 'Done',        colorClass: 'col-done' },
+];
+
+function defaultData() {
+  return {
+    projects: [{ id: 'p1', name: 'Mein erstes Projekt' }],
+    activeProject: 'p1',
+    columns: { p1: JSON.parse(JSON.stringify(DEFAULT_COLUMNS)) },
+    cards: { p1: [
+      { id: cid(), title: 'Willkommen!', desc: 'Deine Daten sind AES-256-GCM verschlüsselt.', priority: 'tief', due: '', col: 'todo' }
+    ]}
+  };
+}
+
+function cid() { return 'c' + Date.now() + Math.random().toString(36).slice(2,6); }
+
+// ════════════════════════════════════════════════════════════════════════
+// RENDER
+// ════════════════════════════════════════════════════════════════════════
+function render() {
+  renderProjectTabs();
+  renderBoard();
+  renderStats();
+}
+
+function renderProjectTabs() {
+  const bar = document.getElementById('projectBar');
+  bar.innerHTML = '';
+  data.projects.forEach(p => {
+    const btn = document.createElement('button');
+    btn.className = 'project-tab' + (p.id === data.activeProject ? ' active' : '');
+    btn.textContent = p.name;
+    btn.onclick = () => { data.activeProject = p.id; save(); render(); };
+    bar.appendChild(btn);
+  });
+  const add = document.createElement('button');
+  add.className = 'project-tab add-tab';
+  add.title = 'Neues Projekt';
+  add.textContent = '+';
+  add.onclick = () => document.getElementById('projModal').classList.add('open');
+  bar.appendChild(add);
+}
+
+function renderBoard() {
+  const board = document.getElementById('board');
+  board.innerHTML = '';
+  const pid = data.activeProject;
+  const cols = data.columns[pid] || DEFAULT_COLUMNS;
+  const cards = data.cards[pid] || [];
+
+  cols.forEach(col => {
+    const colCards = cards.filter(c => c.col === col.id);
+    const div = document.createElement('div');
+    div.className = `column ${col.colorClass || 'col-custom'}`;
+    div.innerHTML = `
+      <div class="column-header">
+        <div class="column-title-row">
+          <div class="column-dot"></div>
+          <span class="column-title">${col.title}</span>
+          <span class="column-count">${colCards.length}</span>
+        </div>
+        <div class="column-actions">
+          <button class="col-btn" onclick="openCardModal('${col.id}')">+</button>
+          <button class="col-btn" onclick="deleteColumn('${col.id}')">✕</button>
+        </div>
+      </div>
+      <div class="cards-container" id="col-${col.id}"
+        ondragover="onDragOver(event,'${col.id}')"
+        ondragleave="onDragLeave(event)"
+        ondrop="onDrop(event,'${col.id}')">
+        ${colCards.length === 0 ? '<div class="empty-state"><div>📭</div>Keine Karten</div>' : ''}
+        ${colCards.map(card => renderCard(card)).join('')}
+      </div>
+      <div style="padding:6px 10px 10px">
+        <button class="add-card-btn" onclick="openCardModal('${col.id}')">+ Karte</button>
+      </div>`;
+    board.appendChild(div);
+  });
+
+  const addColBtn = document.createElement('button');
+  addColBtn.className = 'add-column-btn';
+  addColBtn.title = 'Spalte hinzufügen';
+  addColBtn.textContent = '+';
+  addColBtn.onclick = () => document.getElementById('colModal').classList.add('open');
+  board.appendChild(addColBtn);
+}
+
+function renderCard(card) {
+  const today = new Date().toISOString().slice(0,10);
+  const overdue = card.due && card.due < today ? 'overdue' : '';
+  const dueStr = card.due ? `<span class="card-date ${overdue}">📅 ${formatDate(card.due)}</span>` : '';
+  const colors = { hoch: '#e74c3c', mittel: '#f39c12', tief: '#70AD47' };
+  return `
+    <div class="card" draggable="true" id="card-${card.id}"
+      ondragstart="onDragStart(event,'${card.id}')"
+      ondragend="onDragEnd(event)">
+      <div class="card-priority-bar" style="background:${colors[card.priority] || '#ccc'}"></div>
+      <div class="card-inner">
+        <div class="card-title">${esc(card.title)}</div>
+        ${card.desc ? `<div class="card-desc">${esc(card.desc)}</div>` : ''}
+        <div class="card-meta">
+          <span class="card-badge priority-${card.priority}">${card.priority.charAt(0).toUpperCase()+card.priority.slice(1)}</span>
+          ${dueStr}
+          <div class="card-actions">
+            <button class="card-action-btn" onclick="openCardModal(null,'${card.id}')">✏</button>
+            <button class="card-action-btn" onclick="deleteCard('${card.id}')">🗑</button>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderStats() {
+  const pid = data.activeProject;
+  const cards = data.cards[pid] || [];
+  const today = new Date().toISOString().slice(0,10);
+  const overdue = cards.filter(c => c.due && c.due < today && c.col !== 'done').length;
+  const high = cards.filter(c => c.priority === 'hoch' && c.col !== 'done').length;
+  document.getElementById('statsBar').innerHTML = `
+    <div class="stat">Gesamt: <strong>${cards.length}</strong></div>
+    <div class="stat">Offen: <strong>${cards.filter(c=>c.col!=='done').length}</strong></div>
+    <div class="stat">Erledigt: <strong>${cards.filter(c=>c.col==='done').length}</strong></div>
+    ${overdue > 0 ? `<div class="stat" style="color:#e74c3c">⚠ Überfällig: <strong>${overdue}</strong></div>` : ''}
+    ${high > 0 ? `<div class="stat" style="color:#c0392b">🔴 Hohe Prio: <strong>${high}</strong></div>` : ''}
+  `;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// DRAG & DROP
+// ════════════════════════════════════════════════════════════════════════
+let draggingId = null;
+function onDragStart(e, id) {
+  draggingId = id;
+  document.getElementById('card-'+id)?.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+function onDragEnd() { document.querySelectorAll('.card').forEach(c => c.classList.remove('dragging')); }
+function onDragOver(e, colId) { e.preventDefault(); document.getElementById('col-'+colId)?.classList.add('drag-over'); }
+function onDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
+function onDrop(e, colId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (!draggingId) return;
+  const pid = data.activeProject;
+  const card = (data.cards[pid]||[]).find(c => c.id === draggingId);
+  if (card) { card.col = colId; save(); render(); }
+  draggingId = null;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// CARD MODAL
+// ════════════════════════════════════════════════════════════════════════
+let editingCardId = null;
+function openCardModal(defaultCol, editId) {
+  editingCardId = editId || null;
+  const pid = data.activeProject;
+  const cols = data.columns[pid] || DEFAULT_COLUMNS;
+  const colSel = document.getElementById('cardColumn');
+  colSel.innerHTML = cols.map(c => `<option value="${c.id}">${c.title}</option>`).join('');
+  if (editId) {
+    const card = (data.cards[pid]||[]).find(c=>c.id===editId);
+    if (!card) return;
+    document.getElementById('modalTitle').textContent = 'Karte bearbeiten';
+    document.getElementById('cardTitle').value = card.title;
+    document.getElementById('cardDesc').value = card.desc || '';
+    document.getElementById('cardPriority').value = card.priority;
+    document.getElementById('cardDue').value = card.due || '';
+    colSel.value = card.col;
+  } else {
+    document.getElementById('modalTitle').textContent = 'Neue Karte';
+    document.getElementById('cardTitle').value = '';
+    document.getElementById('cardDesc').value = '';
+    document.getElementById('cardPriority').value = 'mittel';
+    document.getElementById('cardDue').value = '';
+    if (defaultCol) colSel.value = defaultCol;
+  }
+  document.getElementById('cardModal').classList.add('open');
+  setTimeout(() => document.getElementById('cardTitle').focus(), 100);
+}
+function closeCardModal() { document.getElementById('cardModal').classList.remove('open'); }
+function saveCard() {
+  const title = document.getElementById('cardTitle').value.trim();
+  if (!title) { alert('Bitte einen Titel eingeben.'); return; }
+  const pid = data.activeProject;
+  if (!data.cards[pid]) data.cards[pid] = [];
+  const card = {
+    title, desc: document.getElementById('cardDesc').value.trim(),
+    priority: document.getElementById('cardPriority').value,
+    due: document.getElementById('cardDue').value,
+    col: document.getElementById('cardColumn').value,
+  };
+  if (editingCardId) {
+    const idx = data.cards[pid].findIndex(c=>c.id===editingCardId);
+    if (idx>-1) data.cards[pid][idx] = { ...data.cards[pid][idx], ...card };
+  } else {
+    data.cards[pid].push({ id: cid(), ...card });
+  }
+  save(); closeCardModal(); render();
+}
+function deleteCard(id) {
+  if (!confirm('Karte löschen?')) return;
+  const pid = data.activeProject;
+  data.cards[pid] = (data.cards[pid]||[]).filter(c=>c.id!==id);
+  save(); render();
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// COLUMN MODAL
+// ════════════════════════════════════════════════════════════════════════
+function closeColModal() { document.getElementById('colModal').classList.remove('open'); }
+function saveColumn() {
+  const name = document.getElementById('colName').value.trim();
+  if (!name) return;
+  const pid = data.activeProject;
+  if (!data.columns[pid]) data.columns[pid] = JSON.parse(JSON.stringify(DEFAULT_COLUMNS));
+  data.columns[pid].push({ id: 'col_'+Date.now(), title: name, colorClass: 'col-custom' });
+  save(); closeColModal();
+  document.getElementById('colName').value = '';
+  render();
+}
+function deleteColumn(colId) {
+  const pid = data.activeProject;
+  const cards = (data.cards[pid]||[]).filter(c=>c.col===colId);
+  if (cards.length > 0 && !confirm(`Diese Spalte hat ${cards.length} Karte(n). Wirklich löschen?`)) return;
+  data.columns[pid] = (data.columns[pid]||[]).filter(c=>c.id!==colId);
+  data.cards[pid] = (data.cards[pid]||[]).filter(c=>c.col!==colId);
+  save(); render();
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// PROJECT MODAL
+// ════════════════════════════════════════════════════════════════════════
+function closeProjModal() { document.getElementById('projModal').classList.remove('open'); }
+function saveProject() {
+  const name = document.getElementById('projName').value.trim();
+  if (!name) return;
+  const id = 'p_'+Date.now();
+  data.projects.push({ id, name });
+  data.columns[id] = JSON.parse(JSON.stringify(DEFAULT_COLUMNS));
+  data.cards[id] = [];
+  data.activeProject = id;
+  save(); closeProjModal();
+  document.getElementById('projName').value = '';
+  render();
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// EXPORT
+// ════════════════════════════════════════════════════════════════════════
+function exportCSV() {
+  const pid = data.activeProject;
+  const proj = data.projects.find(p=>p.id===pid);
+  const cols = data.columns[pid] || DEFAULT_COLUMNS;
+  const cards = data.cards[pid] || [];
+  const colMap = Object.fromEntries(cols.map(c=>[c.id, c.title]));
+  const rows = [['Summary','Description','Priority','Due Date','Status','Project']];
+  cards.forEach(card => {
+    rows.push([card.title, card.desc||'', card.priority.charAt(0).toUpperCase()+card.priority.slice(1), card.due||'', colMap[card.col]||card.col, proj?.name||'']);
+  });
+  const csv = rows.map(r => r.map(cell => `"${String(cell).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob(['﻿'+csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `kanban_${(proj?.name||'export').replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// CLAUDE IMPORT
+// ════════════════════════════════════════════════════════════════════════
+let parsedImportCards = null;
+function openImportModal() {
+  parsedImportCards = null;
+  document.getElementById('importJson').value = '';
+  document.getElementById('importPreview').style.display = 'none';
+  document.getElementById('importError').style.display = 'none';
+  const sel = document.getElementById('importProject');
+  sel.innerHTML = data.projects.map(p =>
+    `<option value="${p.id}"${p.id===data.activeProject?' selected':''}>${p.name}</option>`).join('');
+  document.getElementById('importModal').classList.add('open');
+  setTimeout(() => document.getElementById('importJson').focus(), 100);
+}
+function closeImportModal() {
+  document.getElementById('importModal').classList.remove('open');
+  parsedImportCards = null;
+}
+function parseImportJson() {
+  const raw = document.getElementById('importJson').value.trim();
+  if (!raw) throw new Error('Bitte JSON einfügen.');
+  const match = raw.match(/```(?:json)?\s*([\s\S]*?)```/) || raw.match(/(\[[\s\S]*\])/);
+  const jsonStr = match ? (match[1] || match[0]).trim() : raw;
+  let cards;
+  try { cards = JSON.parse(jsonStr); }
+  catch(e) { throw new Error('Ungültiges JSON.'); }
+  if (!Array.isArray(cards)) throw new Error('JSON muss ein Array sein.');
+  if (cards.length === 0) throw new Error('Das Array ist leer.');
+  const VALID_PRIO = ['hoch','mittel','tief'];
+  const VALID_COL  = ['todo','inprogress','review','done'];
+  return cards.map((card, i) => {
+    if (!card.title) throw new Error(`Karte ${i+1}: "title" fehlt.`);
+    const prio = (card.priority||'mittel').toLowerCase();
+    const col  = (card.col||'todo').toLowerCase().replace(/\s/g,'');
+    return {
+      id: cid(), title: String(card.title),
+      desc: String(card.desc || card.description || ''),
+      priority: VALID_PRIO.includes(prio) ? prio : 'mittel',
+      due: card.due || '',
+      col: VALID_COL.includes(col) ? col : 'todo',
+    };
+  });
+}
+function previewImport() {
+  const err = document.getElementById('importError');
+  const prev = document.getElementById('importPreview');
+  err.style.display = 'none'; prev.style.display = 'none'; parsedImportCards = null;
+  try {
+    const cards = parseImportJson();
+    parsedImportCards = cards;
+    const counts = {};
+    cards.forEach(c => counts[c.col] = (counts[c.col]||0)+1);
+    const colNames = {todo:'To Do', inprogress:'In Progress', review:'Review', done:'Done'};
+    const summary = Object.entries(counts).map(([k,v]) => `${colNames[k]||k}: ${v}`).join(' · ');
+    prev.innerHTML = `✅ ${cards.length} Karte(n) erkannt | ${summary}`;
+    prev.style.display = 'block';
+  } catch(e) {
+    err.textContent = '❌ ' + e.message;
+    err.style.display = 'block';
+  }
+}
+function confirmImport() {
+  if (!parsedImportCards) { previewImport(); return; }
+  const pid = document.getElementById('importProject').value;
+  if (!data.cards[pid]) data.cards[pid] = [];
+  data.cards[pid].push(...parsedImportCards);
+  save(); closeImportModal(); data.activeProject = pid; render();
+  const n = parsedImportCards.length;
+  parsedImportCards = null;
+  showToast(`✅ ${n} Karte(n) importiert`);
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// HELPERS
+// ════════════════════════════════════════════════════════════════════════
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:#1F4E79;color:white;padding:10px 22px;border-radius:30px;font-size:0.88rem;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,0.2);z-index:999;animation:fadein 0.2s ease';
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 2800);
+}
+function esc(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr+'T00:00:00');
+  return d.toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+}
+
+// Close modals on overlay click
+['cardModal','colModal','projModal','importModal'].forEach(id => {
+  document.getElementById(id)?.addEventListener('click', e => {
+    if (e.target.id === id) document.getElementById(id).classList.remove('open');
+  });
+});
+
+document.getElementById('cardTitle')?.addEventListener('keydown', e => { if(e.key==='Enter') saveCard(); });
+document.getElementById('colName')?.addEventListener('keydown', e => { if(e.key==='Enter') saveColumn(); });
+document.getElementById('projName')?.addEventListener('keydown', e => { if(e.key==='Enter') saveProject(); });
+
+// ════════════════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════════════════
+(function init() {
+  // 1. HTTPS / Secure Context check
+  if (location.protocol !== 'https:' &&
+      location.hostname !== 'localhost' &&
+      location.hostname !== '127.0.0.1') {
+    document.getElementById('httpsWarning').style.display = 'block';
+  }
+
+  // 2. Web Crypto API availability check
+  if (!window.crypto || !window.crypto.subtle) {
+    document.getElementById('lockScreen').querySelector('p').innerHTML =
+      '⛔ Web Crypto API nicht verfügbar.<br>Bitte HTTPS und einen aktuellen Browser verwenden.';
+    return;
+  }
+
+  // 3. Lockout state restore
+  updateLockoutUI();
+
+  // 4. Config check — no config = show setup
+  const cfg = loadCfg();
+  if (!cfg) {
+    document.getElementById('lockScreen').classList.add('hidden');
+    document.getElementById('setupScreen').classList.remove('hidden');
+  }
+  // Lock screen shown by default — user must enter password
+})();
+</script>
+</body>
+</html>
